@@ -1,0 +1,19 @@
+# dependencies
+/node_modules
+
+# 実行結果(normalize.tsを実行すれば毎回作り直される)
+out.json
+
+# misc
+.DS_Store
+
+# local env files
+.env
+.env*.local
+.vscode
+
+# typescript
+*.tsbuildinfo
+
+# AI Agent
+/.claude/

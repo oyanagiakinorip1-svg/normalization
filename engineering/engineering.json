@@ -1,0 +1,195 @@
+[
+  {
+    "systemId": "mechanical",
+    "label": "機械・知能系",
+    "tableIndex": 0,
+    "headers": [
+      "授業コード",
+      "大学院・学部",
+      "開講",
+      "科目名",
+      "科目名（英字）",
+      "担当教員名",
+      "Classroomの クラスコード"
+    ],
+    "rows": [
+      [
+        "ZZ90001",
+        "学部",
+        "前期",
+        "サンプル機械工学",
+        "Sample Mechanical Engineering",
+        "架空 太郎",
+        "sample01"
+      ],
+      [
+        "ZZ90000001",
+        "大学院",
+        "後期前半",
+        "サンプル知能システム",
+        "Sample Intelligent Systems",
+        "架空 花子",
+        "sample02"
+      ]
+    ]
+  },
+  {
+    "systemId": "electrical",
+    "label": "電子情報システム・応物系",
+    "tableIndex": 0,
+    "headers": [
+      "講義コード",
+      "大学院・学部",
+      "開講",
+      "科目名",
+      "科目名（英字）",
+      "担当教員名",
+      "Classroomのクラスコード"
+    ],
+    "rows": [
+      [
+        "ZZ90002",
+        "学部",
+        "後期",
+        "サンプル電子回路",
+        "Sample Electronic Circuits",
+        "架空 次郎",
+        "sample03"
+      ],
+      [
+        "ZZ90003",
+        "学部",
+        "前期集中",
+        "サンプル応用物理",
+        "Sample Applied Physics",
+        "架空 三郎",
+        ""
+      ]
+    ]
+  },
+  {
+    "systemId": "chemical",
+    "label": "化学・バイオ系",
+    "tableIndex": 0,
+    "headers": [
+      "講義コード",
+      "大学院・学部",
+      "開講",
+      "科目名",
+      "科目名（英字）",
+      "担当教員名",
+      "Classroomの クラスコード"
+    ],
+    "rows": [
+      [
+        "ZZ90004",
+        "学部",
+        "前期後半",
+        "サンプル化学",
+        "Sample Chemistry",
+        "架空 四郎",
+        "sample04"
+      ]
+    ]
+  },
+  {
+    "systemId": "materials",
+    "label": "マテリアル・開発系",
+    "tableIndex": 0,
+    "headers": [
+      "講義コード",
+      "大学院・学部",
+      "開講",
+      "科目名",
+      "科目名（英字）",
+      "担当教員名",
+      "Classroomの クラスコード"
+    ],
+    "rows": [
+      [
+        "ZZ90005",
+        "大学院",
+        "後期集中",
+        "サンプル材料科学",
+        "Sample Materials Science",
+        "架空 五郎",
+        "sample05"
+      ]
+    ]
+  },
+  {
+    "systemId": "civil-architecture",
+    "label": "人間・環境系",
+    "tableIndex": 0,
+    "headers": [
+      "講義コード",
+      "大学院・学部",
+      "開講",
+      "科目名",
+      "科目名（英字）",
+      "担当教員名",
+      "Classroomの クラスコード"
+    ],
+    "rows": [
+      [
+        "ZZ90006",
+        "学部",
+        "通年",
+        "サンプル環境工学",
+        "Sample Environmental Engineering",
+        "架空 六郎",
+        "sample06"
+      ]
+    ]
+  },
+  {
+    "systemId": "most",
+    "label": "技術社会システム専攻",
+    "tableIndex": 0,
+    "headers": [
+      "講義コード",
+      "大学院・学部",
+      "開講",
+      "科目名",
+      "科目名（英字）",
+      "担当教員名",
+      "Classroomの クラスコード"
+    ],
+    "rows": [
+      [
+        "ZZ90000007",
+        "大学院",
+        "前期",
+        "サンプル技術社会論",
+        "Sample Technology and Society",
+        "架空 七郎",
+        "sample07"
+      ]
+    ]
+  },
+  {
+    "systemId": "common",
+    "label": "共通",
+    "tableIndex": 0,
+    "headers": [
+      "講義コード",
+      "大学院・学部",
+      "開講",
+      "科目名",
+      "担当教員名",
+      "開講曜日・講時",
+      "Classroomの クラスコード"
+    ],
+    "rows": [
+      [
+        "ZZ90008",
+        "学部",
+        "前期前半",
+        "サンプル共通科目",
+        "Sample Common Course",
+        "架空 八郎",
+        "sample08"
+      ]
+    ]
+  }
+]
