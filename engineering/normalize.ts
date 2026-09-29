@@ -7,6 +7,9 @@ import {
   createWarn,
   mapColumns,
   mergeByCode,
+  parseTerm,
+  readCode,
+  parseSchedule,
   runCli,
 } from '../common/normalizeUtils';
 
@@ -46,89 +49,12 @@ const HEADER_ALIASES: Record<string, Field> = {
   '開講曜日・講時': 'schedule',
 };
 
-const DAYS = ['月', '火', '水', '木', '金', '土', '日'];
-const MAX_PERIOD = 7;
-
 const CODE_PATTERN = /^[A-Z]{2}\d+$/; // 頭がアルファベット２文字で1つ以上の数字が続くとういう正規表現
 
 // 学部・大学院のvalueを取り出す
 function parseLevel(value: string): EngineeringCourse['level'] {
   if (value === '学部' || value === '大学院') return value;
   return null;
-}
-
-// 「月1」「月1,水3」「月1・2」のような表記をcellIndexesに変換する。解釈できなければnull
-function parseSchedule(value: string): number[] | null {
-  const text = value
-    .replace(/\s/g, '') // スペース, タブ, 改行を取り除く
-    .replace(/講時|限/g, ''); // 例 : 月1限 -> 月1
-  if (text === '' || text.includes('集中')) return []; // テキストが空または集中講義の場合は特定の曜日・コマを持たないためnullではなく空配列[]を返して正常終了
-
-  const indexes: number[] = [];
-  const groups = text.match(/[月火水木金土日][\d・,、-]+/g); // 例 : "月1,3水2-4" → ["月1,3", "水2-4"] & \d : 数字
-  if (groups === null || groups.join('') !== text) return null; // 解釈不能な文字(例 : "月1（仮）")などが含まれる場合はnullを返す
-  for (const group of groups) {
-    const day = DAYS.indexOf(group[0]); // 曜日をDAYSのindexの基づき数値化
-    const body = group.slice(1).replace(/[,、]+$/, ''); // groupの先頭の１文字(曜日)と末尾の,や、を取り除く 例 : "月1,3," $\rightarrow$ "1,3"
-    const periods = body.match(/\d+/g) ?? []; // bodyから全ての数字を取り出して配列にする 例 ： "1,3" -> ["1", "3"] 数字が見つからなければ[]を返す
-
-    const range = body.match(/^(\d+)-(\d+)$/);
-    /*
-    body.match(/^(\d+)-(\d+)$/) : 範囲指定かどうかを判別
-    bodyが"1-3"の場合（成功） : rangeには次のような配列が入る
-      range[0] -> "1-3"（全体）
-      range[1] -> "1"（1つ目のカッコ：開始の時限）
-      range[2] -> "3"（2つ目のカッコ：終了の時限）
-    bodyが"1,3"や"1・2"の場合（失敗） : ハイフン形式に一致しないためrangeはnullになる
-    */
-
-    const expanded = range // 時限の数字をリスト化
-      ? Array.from(
-          { length: Number(range[2]) - Number(range[1]) + 1 },
-          (_, i) => Number(range[1]) + i,
-        )
-      : periods.map(Number);
-    /*
-    Number : string -> number
-
-    Array.from() : 配列っぽいものから本物の配列を作る
-    例 : 文字列から配列を作る Array.from('hello') -> ['h', 'e', 'l', 'l', 'o']
-    
-    Array.from({ length: 3 }) : 配列の長さを指定する
-    例 : Array.from({ length: 3 }) -> [undefined, undefined, undefined]
-    
-    (_, i) : マップ関数
-    (value, index)が引数となる
-      _ : 「第1引数の値は使わない」というプログラマーの慣習的な記号。別にvでもいいのに
-      i : 0から始まるカウントアップ数字（1マス目は0、2マス目は1、3マス目は2）
-    */
-
-    for (const period of expanded) {
-      if (period < 1 || period > MAX_PERIOD) return null; // 時限が例外な数値だった場合はnullを返す
-      indexes.push((period - 1) * 7 + day); // indexesにcellIndexを計算して格納
-    }
-  }
-  return Array.from(new Set(indexes)).sort((a, b) => a - b); // 重複を消し、並びを整える
-  /*
-  new Set(indexes) : 重複を消す
-  Setは同じ値を重複して持てないJavaScriptのコレクション。配列をSetに放り込むだけで、かぶっている数字が消える
-  例 : [16, 0, 16] -> Set { 16, 0 }
-
-  // リテラルで作れるもの（newがいらない）
-  const arr = [];      // 配列
-  const obj = {};      // オブジェクト
-
-  // 記号がないので new が必要なもの (インスタンス化)
-  const set = new Set();     // 重複のない集合
-  const map = new Map();     // 連想配列（マップ）
-  const date = new Date();   // 日付データ
-
-  .sort((a, b) => a-b) : 並べ替え
-  sort()は配列から2つの要素aとbを取り出して比較するとき関数が返した数値によって以下のように並び替える
-  マイナスを返したら -> aを前に置く
-  プラスを返したら -> b を前に置く
-  0 を返したら -> 順番を変えない
-  */
 }
 
 // 講義情報を正規化
@@ -156,28 +82,24 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
       );
     }
 
-    const code = get('code').replace(/\s/g, '').toUpperCase(); // 講義コードの空白をすべて消して大文字に統一
-    if (!CODE_PATTERN.test(code)) {
-      // 不正なコードの排除
-      warn(
-        rowIndex,
-        `講義コード「${code}」の形式が想定外のためスキップしました`,
-      );
-      return;
-    }
+    const { code, label } = readCode(
+      get('code'),
+      CODE_PATTERN,
+      get('subject'),
+      (message) => warn(rowIndex, message),
+    ); // 講義コードを読み取る。取れなければcodeはnull、labelは警告メッセージ用(コードがなければ科目名)
     /*
     columns[field]! : 非nullアサーション
     ! をつけると「ここはundefinedじゃないよ」とTypeScriptに教えられる
     直前でundefinedかどうかを確認しているのでここではつけても大丈夫
 
     get('code') : 例えばcolumns.codeが0ならrow[0]をcleanして返す。列がなければ''
-
-    .toUpperCase() : 小文字を大文字にする 例 : "ab123" -> "AB123"
-
-    forEachの中のreturn : forEachでは関数を抜けるのではなく「この行の処理をやめて次の行へ」という意味になる(forのcontinueと同じ)
     */
 
-    const term = get('term').replace(/\s/g, ''); // 開講の空白をすべて消す 例 : "前期 集中" -> "前期集中"
+    const termText = get('term').replace(/\s/g, ''); // 開講の空白をすべて消す 例 : "前期 集中" -> "前期集中"
+    const term = parseTerm(termText, label, (message) =>
+      warn(rowIndex, message),
+    ); // 開講を前期・後期・通年にそろえる 例 : "前期集中" -> "前期"
     const instructor = get('instructor'); // 担当教員名を取り出す
     const schedule = get('schedule'); // 開講曜日・講時を取り出す(commonにしかないので他の系では'')
 
@@ -187,14 +109,14 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
       // schedule列はあるのに解釈できなかった場合は警告
       warn(
         rowIndex,
-        `${code}: 開講曜日・講時「${schedule}」を解釈できません（列ずれの可能性）`,
+        `${label}: 開講曜日・講時「${schedule}」を解釈できません（列ずれの可能性）`,
       );
     }
     if (instructor !== '' && !JAPANESE.test(instructor)) {
       // 担当教員名に日本語が1文字も含まれない場合は別の列の値が入っている可能性があるので警告
       warn(
         rowIndex,
-        `${code}: 担当教員名「${instructor}」に日本語が含まれません（列ずれの可能性）`,
+        `${label}: 担当教員名「${instructor}」に日本語が含まれません（列ずれの可能性）`,
       );
     }
     /*
@@ -206,16 +128,18 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
     const level = parseLevel(get('level')); // '学部'か'大学院'ならそのまま、それ以外はnull
     if (columns.level !== undefined && level === null) {
       // level列はあるのに想定外の値だった場合は警告
-      warn(rowIndex, `${code}: 大学院・学部「${get('level')}」が想定外です`);
+      warn(rowIndex, `${label}: 大学院・学部「${get('level')}」が想定外です`);
     }
 
     // 1行分の講義情報をEngineeringCourseの形にしてcoursesに追加
     courses.push({
       code, // code: code の省略形
+      status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
       systemIds: [table.systemId], // この時点では1つの系だけ。mergeByCodeで他の系とまとめる
       level,
       term,
-      isIntensive: term.includes('集中'), // 開講に「集中」が含まれていれば集中講義
+      semester: null, // 工学部のデータにはセメスターがない
+      isIntensive: termText.includes('集中'), // 開講に「集中」が含まれていれば集中講義
       subject: get('subject'),
       subjectEnglish: get('subjectEnglish') || null, // 空文字''ならnull
       instructor,
@@ -248,4 +172,4 @@ export function normalizeEngineering(tables: RawTable[]) {
   */
 }
 
-runCli(normalizeEngineering, __dirname, 'engineering.json');
+runCli(normalizeEngineering, __dirname, 'mock.json');

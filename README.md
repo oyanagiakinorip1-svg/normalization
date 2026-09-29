@@ -1,26 +1,114 @@
 # normalization
 
-シラバスのスクレイピング結果（学部・系ごとの講義一覧テーブル）を、学部ごとのルールで正規化するスクリプトです。
+UNIPA以外から取得した講義情報を学部ごとに正規化する
 
 ## フォルダ構成
 
 | フォルダ | 内容 |
 |---|---|
-| `common/` | 全学部で共通の処理（空白の整形、ヘッダーと列の対応付け、講義コードでのまとめ、警告） |
+| `common/` | 全学部で共通の処理 |
 | `engineering/` | 工学部用 |
 | `law/` | 法学部用 |
+| `literature/` | 文学部用 |
+| `science/` | 理学部用 |
+| `agriculture/` | 農学部用。1講義1オブジェクトの入力形式に対応 |
+
+各フォルダの`mock.json`が各学部のモックに対応している
 
 ## 使い方
 
 ```
 npm install
-npx tsx engineering/normalize.ts [入力JSON] [出力JSON]
-npx tsx law/normalize.ts [入力JSON] [出力JSON]
+npx tsx <学部>/normalize.ts [入力JSON] [出力JSON]
 ```
 
-入力と出力を省略した場合は、同じフォルダの `engineering.json`（または `law.json`）を読み込み、`out.json` に書き出します。
+例：`npx tsx engineering/normalize.ts`<br>
+入力を省略すると同じフォルダの`mock.json`を、出力を省略すると同じフォルダの`out.json`を使う。
+
+## 入力
+
+農学部以外は次の形（`RawTable`）の配列
+
+```json
+{
+  "systemId": "mechanical",
+  "label": "機械・知能系",
+  "tableIndex": 0,
+  "headers": ["講義コード", "開講", "科目名", "担当教員名"],
+  "rows": [["ZZ90001", "前期", "サンプル機械工学", "架空 太郎"]]
+}
+```
+
+※列の並び順やヘッダーの書き方は、テーブルごとに違う
+
+※農学部は、1講義1オブジェクトの配列（`subject`、`classroomCode`、`lectureCode`、`status`、`candidateCodes` など）。
 
 ## 出力
 
-- `courses`: 正規化した講義の一覧。同じ講義コードは1件にまとめ、`systemIds` に掲載元の系を並べる
-- `warnings`: 列ずれの疑いなど、確認が必要なデータ。データそのものは自動で直さない
+```json
+{
+  "courses": [ ... ],
+  "warnings": [ ... ]
+}
+```
+
+- ヘッダーはテーブルごとに決まった列にないので、テーブルを読むたびに「どのフィールドが何列目か」の辞書を作る。ヘッダーの書き方の違い（例:「授業コード」と「講義コード」）は学部ごとの `HEADER_ALIASES`でフィールド名にそろえる。
+- 辞書の番号で各行から値を取り出し、講義コード・開講時期・曜日講時などを読み取る（`readCode`、`parseTerm`、`parseSemester`、`parseSchedule`）。<br>
+**※1つのテーブルの中では、ヘッダーと各行の同じ番号の列が対応しているものとして読んでいる（決め打ち）**
+- 同じ講義コードの講義は1件にまとめている（`mergeByCode`）。
+
+読み取れなかった値や、列ずれの疑い（列数がヘッダーの数と違う、担当教員名に日本語がないなど）は、途中で`warnings`に記録
+
+### courses
+
+正規化した講義の一覧。同じ講義コードの講義は1件にまとめ、`systemIds`に掲載元の系を並べる。
+
+**全学部に共通する項目**
+| 項目 | 型 | 内容 |
+|---|---|---|
+| `code` | `string \| null` | 講義コード。取れなければ `null` |
+| `status` | 下の表を参照 | 講義コードが取れたかどうか |
+| `systemIds` | `string[]` | 掲載元の系 |
+| `level` | `'学部' \| '大学院' \| null` | 学部か大学院か |
+| `term` | `'前期' \| '後期' \| '通年' \| null` | 開講時期 |
+| `semester` | `number \| null` | セメスター番号 |
+| `subject` | `string` | 科目名 |
+| `instructor` | `string` | 担当教員名 |
+| `classroomCode` | `string \| null` | Google Classroom のクラスコード |
+
+**学部ごとの項目**
+| 項目 | 学部 | 内容 |
+|---|---|---|
+| `cellIndexes` | 工学部・文学部・理学部 | 曜日・講時。この列がなければ `null`、空欄なら `[]` |
+| `isIntensive` | 工学部 | 集中講義か |
+| `subjectEnglish` | 工学部 | 英語の科目名 |
+| `room` | 文学部・理学部 | 教室 |
+| `page` | 農学部 | 入力の `page` |
+| `candidateCodes` | 農学部 | 講義コードの候補 |
+
+### status
+
+| 値 | 意味 | `code` |
+|---|---|---|
+| `matched` | 講義コードが取れた | 講義コード |
+| `unmatched` | 講義コードがない、または形式が想定外 | `null` |
+| `ambiguous` | 講義コードの候補が複数ある（候補は `candidateCodes`） | `null` |
+| `not-offered` | 不開講 | `null` |
+
+`ambiguous` と `not-offered` は、入力の `status` をそのまま使う農学部でだけ出る
+
+### term と semester
+
+| 元の表記 | `term` | `semester` |
+|---|---|---|
+| 前期、前期前半、前期集中、第1学期 | `前期` | `null` |
+| 後期、後期前半、後期集中、第2学期 | `後期` | `null` |
+| 通年 | `通年` | `null` |
+| 5セメ、02 など | 奇数なら `前期`、偶数なら `後期` | `5`、`2` |
+| そろえられない表記 | `null` | `null` |
+
+※そろえられない表記は、元の文字のまま残さずに`null`にしている（列ずれで別の列の値が入ったときにそのまま残らないようにするため）
+
+### warnings
+
+列ずれの疑いや、講義コード・開講時期などが読み取れなかった行の一覧。データそのものは自動で直さない。手動で直すこと前提

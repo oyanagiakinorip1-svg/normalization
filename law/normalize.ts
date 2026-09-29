@@ -7,6 +7,8 @@ import {
   createWarn,
   mapColumns,
   mergeByCode,
+  parseTerm,
+  readCode,
   runCli,
 } from '../common/normalizeUtils';
 
@@ -72,37 +74,36 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
       );
     }
 
-    const code = get('code').replace(/\s/g, '').toUpperCase(); // 講義コードの空白をすべて消して大文字に統一
-    if (!CODE_PATTERN.test(code)) {
-      // 不正なコードの排除
-      warn(
-        rowIndex,
-        `講義コード「${code}」の形式が想定外のためスキップしました`,
-      );
-      return;
-    }
+    const { code, label } = readCode(
+      get('code'),
+      CODE_PATTERN,
+      get('subject'),
+      (message) => warn(rowIndex, message),
+    ); // 講義コードを読み取る。取れなければcodeはnull、labelは警告メッセージ用(コードがなければ講義名称)
 
     const instructor = get('instructor'); // 成績担当教員を取り出す
     if (instructor !== '' && !JAPANESE.test(instructor)) {
       // 担当教員名に日本語が1文字も含まれない場合は別の列の値が入っている可能性があるので警告
       warn(
         rowIndex,
-        `${code}: 成績担当教員「${instructor}」に日本語が含まれません（列ずれの可能性）`,
+        `${label}: 成績担当教員「${instructor}」に日本語が含まれません（列ずれの可能性）`,
       );
     }
 
     const level = LEVEL_ALIASES[get('level')] ?? null; // 「法学部」なら'学部'、「法学研究科」なら'大学院'、それ以外はnull
     if (columns.level !== undefined && level === null) {
       // level列はあるのに想定外の値だった場合は警告
-      warn(rowIndex, `${code}: 学部／研究科「${get('level')}」が想定外です`);
+      warn(rowIndex, `${label}: 学部／研究科「${get('level')}」が想定外です`);
     }
 
     // 1行分の講義情報をLawCourseの形にしてcoursesに追加
     courses.push({
       code,
+      status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
       systemIds: [table.systemId],
       level,
-      term: get('term').replace(/\s/g, ''), // 講義期間の空白をすべて消す
+      term: parseTerm(get('term'), label, (message) => warn(rowIndex, message)), // 講義期間を前期・後期・通年にそろえる
+      semester: null, // 法学部のデータにはセメスターがない
       subject: get('subject'),
       instructor,
       classroomCode: get('classroomCode') || null, // 空文字''ならnull
@@ -118,4 +119,4 @@ export function normalizeLaw(tables: RawTable[]) {
   return { courses: mergeByCode(courses, warnings), warnings };
 }
 
-runCli(normalizeLaw, __dirname, 'law.json');
+runCli(normalizeLaw, __dirname, 'mock.json');

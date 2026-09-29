@@ -1,0 +1,68 @@
+[
+  {
+    "school": "undergraduate",
+    "subject": "サンプル農学講義",
+    "classroomCode": "sample01",
+    "page": 1,
+    "lectureCode": "AB9991",
+    "status": "matched",
+    "candidateCodes": ["AB9991"]
+  },
+  {
+    "school": "undergraduate",
+    "subject": "サンプル農学演習（植物）",
+    "classroomCode": "sample02",
+    "page": 1,
+    "lectureCode": "AB9992",
+    "status": "matched",
+    "candidateCodes": ["AB9992"]
+  },
+  {
+    "school": "undergraduate",
+    "subject": "サンプル農学実習",
+    "classroomCode": "sample03",
+    "page": 1,
+    "lectureCode": null,
+    "status": "unmatched",
+    "candidateCodes": []
+  },
+  {
+    "school": "undergraduate",
+    "subject": "サンプル農学特別講義",
+    "classroomCode": "不開講",
+    "page": 1,
+    "lectureCode": null,
+    "status": "not-offered",
+    "candidateCodes": []
+  },
+  {
+    "school": "graduate",
+    "subject": "サンプル農学特論",
+    "classroomCode": "sample04",
+    "page": 1,
+    "degree": "master",
+    "lectureCode": null,
+    "status": "ambiguous",
+    "candidateCodes": ["AM9991", "AM9992"]
+  },
+  {
+    "school": "graduate",
+    "subject": "サンプル農学研究",
+    "classroomCode": "sample05",
+    "page": 1,
+    "degree": "master",
+    "lectureCode": "AM9993",
+    "status": "matched",
+    "candidateCodes": ["AM9993"]
+  },
+  {
+    "school": "graduate",
+    "subject": "サンプル農学研究",
+    "classroomCode": "sample06",
+    "page": 2,
+    "degree": "doctoral",
+    "lectureCode": "AD9991",
+    "status": "matched",
+    "candidateCodes": ["AD9991"]
+  }
+]
