@@ -92,10 +92,11 @@ export function normalizeAgriculture(raws: RawAgricultureCourse[]) {
     courses.push({
       code,
       status,
+      year: null, // 農学部のデータには年度がない
       systemIds: [SYSTEM_ID],
       level,
       term: null, // 農学部のデータには開講時期がない
-      semester: null,
+      semesters: [], // 農学部のデータには対象学年やセメスターがない
       subject,
       instructor: '', // 農学部のデータには教員がない
       classroomCode:

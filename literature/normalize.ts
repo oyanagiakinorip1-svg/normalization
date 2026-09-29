@@ -22,13 +22,13 @@ type LiteratureField =
   | 'semester' // セメスター
   | 'subject' // 授業科目名 / 科目
   | 'instructor' // 教員
-  | 'room' // 教室
+  | 'place' // 教室
   | 'classroomCode' // クラスコード
-  | 'roomAndClassroomCode'; // 教室／クラスコード(1年次のテーブルは1つの列にまとまっている)
+  | 'placeAndClassroomCode'; // 教室／クラスコード(1年次のテーブルは1つの列にまとまっている)
 
 // BaseCourseに文学部だけの項目を足した型
 export type LiteratureCourse = BaseCourse & {
-  room: string | null; // 教室
+  place: string | null; // 教室(webAppのSyllabus.placeと同じ名前)
   // Syllabus.cellIndexes と同じ採番: (講時 - 1) * 7 + 曜日(月=0)
   cellIndexes: number[] | null;
 };
@@ -44,9 +44,9 @@ const HEADER_ALIASES: Record<string, LiteratureField> = {
   授業科目名: 'subject',
   科目: 'subject',
   教員: 'instructor',
-  教室: 'room',
+  教室: 'place',
   クラスコード: 'classroomCode',
-  '教室/クラスコード': 'roomAndClassroomCode', // 「／」(全角)はNFKCで「/」(半角)になる
+  '教室/クラスコード': 'placeAndClassroomCode', // 「／」(全角)はNFKCで「/」(半角)になる
 };
 
 const CODE_PATTERN = /^[A-Z]{2}\d+$/; // 頭がアルファベット２文字で1つ以上の数字が続く 例 : LB99991
@@ -120,11 +120,11 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
     */
 
     // 教室とクラスコードを取り出す。1年次のテーブルは「701／sample01」のように1つの列にまとまっている
-    let room = get('room');
+    let place = get('place');
     let classroomCode = get('classroomCode');
-    if (columns.roomAndClassroomCode !== undefined) {
-      const [first, second] = get('roomAndClassroomCode').split(/[/／]/); // 半角「/」と全角「／」のどちらでも分ける
-      room = first?.trim() ?? '';
+    if (columns.placeAndClassroomCode !== undefined) {
+      const [first, second] = get('placeAndClassroomCode').split(/[/／]/); // 半角「/」と全角「／」のどちらでも分ける
+      place = first?.trim() ?? '';
       classroomCode = second?.trim() ?? '';
     }
     /*
@@ -153,13 +153,14 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
     courses.push({
       code,
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
+      year: null, // 文学部のデータには年度がない
       systemIds: [table.systemId],
       level,
       term: termFromSemester(semester), // 文学部のデータには前期・後期の列がないので、セメスターの奇数・偶数から決める 例 : 2 -> "後期"
-      semester,
+      semesters: semester === null ? [] : [semester], // 例 : 2 -> [2]
       subject: get('subject'),
       instructor,
-      room: room || null, // 空文字''ならnull
+      place: place || null, // 空文字''ならnull
       classroomCode: classroomCode || null, // 空文字''ならnull
       cellIndexes,
     });

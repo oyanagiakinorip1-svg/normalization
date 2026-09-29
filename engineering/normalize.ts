@@ -135,10 +135,11 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
     courses.push({
       code, // code: code の省略形
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
+      year: null, // 工学部のデータには年度がない
       systemIds: [table.systemId], // この時点では1つの系だけ。mergeByCodeで他の系とまとめる
       level,
       term,
-      semester: null, // 工学部のデータにはセメスターがない
+      semesters: [], // 工学部のデータには対象学年やセメスターがない
       isIntensive: termText.includes('集中'), // 開講に「集中」が含まれていれば集中講義
       subject: get('subject'),
       subjectEnglish: get('subjectEnglish') || null, // 空文字''ならnull

@@ -34,10 +34,11 @@ export type Term = '前期' | '後期' | '通年';
 export type BaseCourse = {
   code: string | null; // 講義コードが取れなかったらnull(仮のコードは入れない)
   status: CourseStatus;
+  year: number | null; // 年度(webAppのSyllabus.yearと同じ。Syllabusはcodeとyearの組み合わせで1件に決まる)。わからなければnull
   systemIds: string[];
   level: '学部' | '大学院' | null;
   term: Term | null; // 前期・後期・通年。わからなければnull
-  semester: number | null; // セメスター番号(1以上。6年制の学部なら12まである)。わからなければnull
+  semesters: number[]; // セメスター番号の配列(webAppのSyllabus.semestersと同じ形)。わからなければ[] 例 : 2・3・4年の前期 -> [3, 5, 7]
   subject: string;
   instructor: string;
   classroomCode: string | null;
@@ -198,6 +199,22 @@ export function readCode(
   */
 }
 
+// 年度の表記を数字にする。4桁の数字でなければnullにして警告を出す 例 : "2026" -> 2026
+export function parseYear(
+  value: string, // 年度のセルの値
+  label: string, // 警告メッセージ用(講義コードか科目名)
+  warn: (message: string) => void,
+): number | null {
+  const text = value.replace(/\s/g, ''); // スペース, タブ, 改行を取り除く
+  if (text === '') return null; // 年度の列がない、または空欄
+  if (/^\d{4}$/.test(text)) return Number(text);
+  warn(`${label}: 年度「${value}」を解釈できないため year: null にしました`);
+  return null;
+  /*
+  /^\d{4}$/ : ちょうど4桁の数字
+  */
+}
+
 // 開講時期の表記を'前期' / '後期' / '通年'にそろえる。そろえられなければnullにして警告を出す
 // 元の文字のまま残さないのは、列ずれで別の列の値が入っていたときに、そのままDBまで流れてしまわないようにするため
 // 例 : "前期集中" -> "前期", "後期前半" -> "後期", "第1学期" -> "前期"
@@ -255,6 +272,26 @@ export function termFromSemester(semester: number | null): Term | null {
   return semester % 2 === 1 ? '前期' : '後期';
   /*
   semester % 2 : 2で割った余り。1なら奇数、0なら偶数
+  */
+}
+
+// 対象学年と前期・後期からセメスター番号の配列を作る。どちらかがわからなければ[]
+// 1年 : 前期 1, 後期 2 / 2年 : 前期 3, 後期 4 / ... のように、セメスター = (学年 - 1) * 2 + (前期なら1、後期なら2)
+// 例 : [2, 3, 4]と"前期" -> [3, 5, 7], [1]と"通年" -> [1, 2]
+export function semestersFromGrades(
+  grades: number[] | null,
+  term: Term | null,
+): number[] {
+  if (grades === null || term === null) return [];
+  return grades.flatMap((grade) => {
+    const first = (grade - 1) * 2 + 1; // その学年の前期のセメスター
+    if (term === '前期') return [first];
+    if (term === '後期') return [first + 1];
+    return [first, first + 1]; // 通年は前期と後期の両方
+  });
+  /*
+  .flatMap() : mapしたあとに1段階だけ平らにする
+  例 : [2, 3]と"通年" -> [[3, 4], [5, 6]] -> [3, 4, 5, 6]
   */
 }
 
@@ -352,9 +389,12 @@ export function mergeByCode<T extends BaseCourse>(
     existing.systemIds = Array.from(
       new Set([...existing.systemIds, ...course.systemIds]),
     ); // 系のリストを合体して重複を消す 例 : ['A'] + ['B'] -> ['A', 'B']
+    existing.semesters = Array.from(
+      new Set([...existing.semesters, ...course.semesters]),
+    ).sort((a, b) => a - b); // セメスターも合体して重複を消し、小さい順に並べる
     for (const key of [
+      'year',
       'term',
-      'semester',
       'subject',
       'instructor',
       'classroomCode',
@@ -393,11 +433,11 @@ export function mergeByCode<T extends BaseCourse>(
   コピーしないと、あとでexistingを書き換えたときに元のcourseまで書き換わってしまう
   例 : [...['A'], ...['B']] -> ['A', 'B']
 
-  as const : 配列を「'term' | 'semester' | 'subject' | 'instructor' | 'classroomCode'」の型として扱わせる
+  as const : 配列を「'year' | 'term' | 'subject' | 'instructor' | 'classroomCode'」の型として扱わせる
   これがないとkeyがただのstringになり、existing[key]でエラーになる
 
   (existing[key] as string | number | null) = course[key]
-  keyによって型が違う(termとsemesterは数字、classroomCodeはnullあり)ので、TypeScriptに「string | number | nullとして代入していいよ」と教えている
+  keyによって型が違う(yearは数字、termは'前期'などに決まっている、classroomCodeはnullあり)ので、TypeScriptに「string | number | nullとして代入していいよ」と教えている
 
   <T extends BaseCourse> : TはBaseCourseの項目を全部持っている型ならなんでもいい
   EngineeringCourseでもLawCourseでも使えて、返り値も渡した型のまま返ってくる

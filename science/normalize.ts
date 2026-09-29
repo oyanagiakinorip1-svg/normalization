@@ -25,11 +25,11 @@ type ScienceField =
   | 'code' // 履修用コード(大学院のテーブルにはない)
   | 'subject' // 授業科目名
   | 'instructor' // 教員
-  | 'room'; // 教室
+  | 'place'; // 教室
 
 // BaseCourseに理学部だけの項目を足した型
 export type ScienceCourse = BaseCourse & {
-  room: string | null; // 教室
+  place: string | null; // 教室(webAppのSyllabus.placeと同じ名前)
   // Syllabus.cellIndexes と同じ採番: (講時 - 1) * 7 + 曜日(月=0)
   cellIndexes: number[] | null;
 };
@@ -45,7 +45,7 @@ const HEADER_ALIASES: Record<string, ScienceField> = {
   履修用コード: 'code',
   授業科目名: 'subject',
   教員: 'instructor',
-  教室: 'room',
+  教室: 'place',
 };
 
 // 使わない列。未知のヘッダーの警告を出さないようにする
@@ -128,13 +128,14 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
     courses.push({
       code,
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
+      year: null, // 理学部のデータには年度がない
       systemIds: [table.systemId],
       level,
       term: parseTerm(get('term'), label, onWarn) ?? termFromSemester(semester), // 大学院は学期から(例 : "第1学期" -> "前期")、学部はセメスターの奇数・偶数から(例 : 5 -> "前期")
-      semester,
+      semesters: semester === null ? [] : [semester], // 例 : 5 -> [5]
       subject: get('subject'),
       instructor,
-      room: get('room') || null, // 空文字''ならnull
+      place: get('place') || null, // 空文字''ならnull
       classroomCode: null, // 理学部のデータにはClassroomのクラスコードがない
       cellIndexes,
     });

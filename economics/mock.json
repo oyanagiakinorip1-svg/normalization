@@ -1,0 +1,30 @@
+[
+  {
+    "systemId": "economics-undergraduate",
+    "label": "経済学部・学部時間割",
+    "tableIndex": 0,
+    "headers": ["曜日", "講時", "講義コード", "授業科目名", "学年配当", "学期", "講義室名", "担当教員"],
+    "rows": [
+      ["月", "1", "EB999", "架空の経済分析", "２･３･４", "Ⅰ", "経1", "架空 太郎"],
+      ["木", "2", "EB998", "架空の経営入門", "１・２", "Ⅱ", "経2", "架空 花子"]
+    ]
+  },
+  {
+    "systemId": "economics-graduate-research",
+    "label": "経済学研究科・リサーチコース特論等",
+    "tableIndex": 0,
+    "headers": ["曜日", "講時", "講義コード", "授業科目名", "学期", "開講場所", "担当教員"],
+    "rows": [
+      ["月", "1", "EM9999", "架空の経済学特論", "Ⅰ", "小講1", "架空 次郎"]
+    ]
+  },
+  {
+    "systemId": "economics-graduate-gpem",
+    "label": "経済学研究科・GPEM特論等",
+    "tableIndex": 0,
+    "headers": ["Day", "Period", "Code", "Subject Name", "Session", "Venue", "Instructor"],
+    "rows": [
+      ["Wed", "Ⅲ", "EM9998", "Sample Economics Seminar", "Fall", "Online", "Sample Instructor"]
+    ]
+  }
+]

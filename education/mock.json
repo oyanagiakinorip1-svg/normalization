@@ -1,0 +1,25 @@
+[
+  {
+    "systemId": "education",
+    "label": "教育学部・教育学研究科",
+    "tableIndex": 0,
+    "headers": [
+      "履修年度",
+      "講義コード",
+      "講義期間",
+      "講義名称",
+      "講義名称（英語）",
+      "学部／研究科",
+      "成績担当教員",
+      "クラスルームの作成状況",
+      "クラスコード",
+      "アクティブ／アーカイブ"
+    ],
+    "rows": [
+      ["2026", "PB99991", "前期", "架空の教育学講義", "Sample Lecture on Education", "教育学部", "架空 太郎", "作成済み", "sample01", "ACTIVE"],
+      ["2026", "PB99992", "後期", "架空の教育心理学演習", "Sample Seminar in Educational Psychology", "教育学部", "架空 花子", "", "", ""],
+      ["2026", "PM99991", "通年", "架空の教育学研究演習", "Sample Research Seminar in Education", "教育学研究科", "架空 次郎", "作成済み", "sample02", "ACTIVE"],
+      ["2026", "PD99991", "前期集中", "架空の教育科学特別研究", "Sample Advanced Study in Educational Science", "教育学研究科", "架空 四郎", "作成済み", "sample03", "ACTIVE"]
+    ]
+  }
+]

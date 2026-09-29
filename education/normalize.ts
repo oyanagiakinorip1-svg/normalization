@@ -13,43 +13,44 @@ import {
   runCli,
 } from '../common/normalizeUtils';
 
-type LawField =
+type EducationField =
   | 'year' // 履修年度
   | 'code' // 講義コード
   | 'term' // 講義期間
   | 'subject' // 講義名称
+  | 'subjectEnglish' // 講義名称（英語）
   | 'level' // 学部／研究科
   | 'instructor' // 成績担当教員
   | 'classroomCode'; // クラスコード
 
-// 法学部は今のところBaseCourseにない項目がないのでそのまま使う
-export type LawCourse = BaseCourse;
+// BaseCourseに教育学部だけの項目を足した型
+export type EducationCourse = BaseCourse & {
+  isIntensive: boolean;
+  subjectEnglish: string | null;
+};
 
 // 空白を除去してNFKCをかけたヘッダー名 -> フィールド
-const HEADER_ALIASES: Record<string, LawField> = {
+const HEADER_ALIASES: Record<string, EducationField> = {
   履修年度: 'year',
   講義コード: 'code',
   講義期間: 'term',
   講義名称: 'subject',
+  '講義名称(英語)': 'subjectEnglish', // 「（）」(全角)はNFKCで「()」(半角)になる
   '学部/研究科': 'level', // 「／」(全角)はNFKCで「/」(半角)になる
   成績担当教員: 'instructor',
   クラスコード: 'classroomCode',
 };
 
 // 使わない列。未知のヘッダーの警告を出さないようにする
-const IGNORED_HEADERS = [
-  'クラスルームの作成状況',
-  'アクティブ/アーカイブ',
-  '', // 見出しが空の列(注記が入っている)
-];
+const IGNORED_HEADERS = ['クラスルームの作成状況', 'アクティブ/アーカイブ'];
 
 // 「学部／研究科」の値 -> level
-const LEVEL_ALIASES: Record<string, LawCourse['level']> = {
-  法学部: '学部',
-  法学研究科: '大学院',
+const LEVEL_ALIASES: Record<string, EducationCourse['level']> = {
+  教育学部: '学部',
+  教育学研究科: '大学院',
 };
 
-const CODE_PATTERN = /^[A-Z]{2}\d+[A-Z]*$/; // 頭がアルファベット２文字で1つ以上の数字が続き、後ろに英字が付いてもいい 例 : JB99999, JM99999KR
+const CODE_PATTERN = /^[A-Z]{2}\d+$/; // 頭がアルファベット２文字で1つ以上の数字が続く 例 : PB99991
 
 // 講義情報を正規化
 function normalizeTable(table: RawTable, warnings: Warning[]) {
@@ -62,9 +63,9 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
     warn,
   ); // ヘッダーから「どのフィールドが何列目か」の辞書を作る。必須列がなければ警告
 
-  const courses: LawCourse[] = [];
+  const courses: EducationCourse[] = [];
   table.rows.forEach((row, rowIndex) => {
-    const get = (field: LawField) =>
+    const get = (field: EducationField) =>
       // 指定したフィールド名を渡すと正しいセルから値を取り出し余計な空白などを弾いて返す
       columns[field] === undefined ? '' : clean(row[columns[field]!]);
 
@@ -92,22 +93,26 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
       );
     }
 
-    const level = LEVEL_ALIASES[get('level')] ?? null; // 「法学部」なら'学部'、「法学研究科」なら'大学院'、それ以外はnull
+    const level = LEVEL_ALIASES[get('level')] ?? null; // 「教育学部」なら'学部'、「教育学研究科」なら'大学院'、それ以外はnull
     if (columns.level !== undefined && level === null) {
       // level列はあるのに想定外の値だった場合は警告
       warn(rowIndex, `${label}: 学部／研究科「${get('level')}」が想定外です`);
     }
 
-    // 1行分の講義情報をLawCourseの形にしてcoursesに追加
+    const termText = get('term').replace(/\s/g, ''); // 講義期間の空白をすべて消す
+
+    // 1行分の講義情報をEducationCourseの形にしてcoursesに追加
     courses.push({
       code,
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
       year: parseYear(get('year'), label, (message) => warn(rowIndex, message)), // 履修年度を数字にする 例 : "2026" -> 2026
       systemIds: [table.systemId],
       level,
-      term: parseTerm(get('term'), label, (message) => warn(rowIndex, message)), // 講義期間を前期・後期・通年にそろえる
-      semesters: [], // 法学部のデータには対象学年やセメスターがない
+      term: parseTerm(termText, label, (message) => warn(rowIndex, message)), // 講義期間を前期・後期・通年にそろえる 例 : "前期集中" -> "前期"
+      semesters: [], // 教育学部のデータには対象学年やセメスターがない
+      isIntensive: termText.includes('集中'), // 講義期間に「集中」が含まれていれば集中講義
       subject: get('subject'),
+      subjectEnglish: get('subjectEnglish') || null, // 空文字''ならnull
       instructor,
       classroomCode: get('classroomCode') || null, // 空文字''ならnull
     });
@@ -116,10 +121,10 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
 }
 
 // 全テーブルを正規化して、講義コードでまとめたものと警告を返す
-export function normalizeLaw(tables: RawTable[]) {
+export function normalizeEducation(tables: RawTable[]) {
   const warnings: Warning[] = []; // 全テーブル共通の警告リスト
   const courses = tables.flatMap((table) => normalizeTable(table, warnings)); // 各テーブルを正規化して1つの配列につなげる
   return { courses: mergeByCode(courses, warnings), warnings };
 }
 
-runCli(normalizeLaw, __dirname, 'mock.json');
+runCli(normalizeEducation, __dirname, 'mock.json');
