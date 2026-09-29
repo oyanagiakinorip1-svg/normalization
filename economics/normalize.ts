@@ -7,13 +7,13 @@ import {
   clean,
   createWarn,
   mapColumns,
-  mergeByCode,
   normalizeHeader,
   parseSchedule,
   parseTerm,
   readCode,
   runCli,
   semestersFromGrades,
+  parseGrades,
 } from '../common/normalizeUtils';
 
 type EconomicsField =
@@ -26,13 +26,8 @@ type EconomicsField =
   | 'place' // 講義室名 / 開講場所 / Venue
   | 'instructor'; // 担当教員 / Instructor
 
-// BaseCourseに経済学部だけの項目を足した型
-export type EconomicsCourse = BaseCourse & {
-  place: string | null; // 教室(webAppのSyllabus.placeと同じ名前)
-  grades: number[] | null; // 対象学年 例 : [2, 3, 4]。学年配当の列がなければnull
-  // Syllabus.cellIndexes と同じ採番: (講時 - 1) * 7 + 曜日(月=0)
-  cellIndexes: number[] | null;
-};
+// 経済学部の講義。項目は全学部共通(BaseCourse)
+export type EconomicsCourse = BaseCourse;
 
 // 空白を除去してNFKCをかけたヘッダー名 -> フィールド
 // GPEMのテーブルはヘッダーが英語なので、英語のヘッダーも同じフィールドにそろえる
@@ -110,40 +105,9 @@ function parseEconomicsTerm(
   return parseTerm(value, label, warn);
 }
 
-// 学年配当を数字の配列にする。学年配当の列がなければnull
-// 例 : "2･3･4" -> [2, 3, 4], "1・2" -> [1, 2], "2～4" -> [2, 3, 4]
-function parseGrades(
-  value: string,
-  label: string,
-  warn: (message: string) => void,
-): number[] | null {
-  const text = value.replace(/\s/g, ''); // スペース, タブ, 改行を取り除く
-  if (text === '') return null;
-
-  const range = text.match(/^(\d+)[~～-](\d+)$/); // 範囲指定かどうか 例 : "2～4"
-  if (range !== null) {
-    const start = Number(range[1]);
-    const end = Number(range[2]);
-    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  }
-
-  const grades = (text.match(/\d+/g) ?? []).map(Number); // 数字を全部取り出す 例 : "2･3･4" -> [2, 3, 4]
-  if (grades.length === 0) {
-    warn(
-      `${label}: 学年配当「${value}」を解釈できないため grades: null にしました`,
-    );
-    return null;
-  }
-  return grades;
-  /*
-  範囲指定の書き方はparseScheduleのrangeと同じ
-  Array.from({ length: 3 }, (_, i) => 2 + i) -> [2, 3, 4]
-  */
-}
-
 // 講義情報を正規化
 function normalizeTable(table: RawTable, warnings: Warning[]) {
-  const warn = createWarn(table, warnings); // 警告用の関数(common/normalizeUtils.ts)
+  const warn = createWarn(table, warnings, 'economics'); // 警告用の関数(common/normalizeUtils.ts)
   const columns = mapColumns(
     table.headers,
     HEADER_ALIASES,
@@ -229,11 +193,15 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
       code,
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
       year: null, // 経済学部のデータには年度がない
-      systemIds: [table.systemId],
+      faculty: 'economics',
+      systemId: table.systemId,
       level,
       term,
-      semesters: semestersFromGrades(grades, term), // 学年配当と学期から計算する 例 : [2, 3, 4]と"前期" -> [3, 5, 7]。学年配当がない大学院のテーブルは[]
+      semesters: level === '学部' ? semestersFromGrades(grades, term) : [], // 学年配当と学期から計算する 例 : [2, 3, 4]と"前期" -> [3, 5, 7]。大学院は学部と数え方が違うので計算しない
+      isIntensive:
+        columns.term === undefined ? null : get('term').includes('集中'), // 学期に「集中」が含まれていれば集中講義
       subject: get('subject'),
+      subjectEnglish: null, // 経済学部のデータには英語の科目名の列がない(GPEMの科目名は英語だがsubjectに入れている)
       instructor,
       classroomCode: null, // 経済学部のデータにはClassroomのクラスコードがない
       place: get('place') || null, // 空文字''ならnull
@@ -244,11 +212,11 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
   return courses;
 }
 
-// 全テーブルを正規化して、講義コードでまとめたものと警告を返す
+// 全テーブルを正規化して、講義の一覧と警告を返す(同じ講義コードでもまとめない)
 export function normalizeEconomics(tables: RawTable[]) {
   const warnings: Warning[] = []; // 全テーブル共通の警告リスト
   const courses = tables.flatMap((table) => normalizeTable(table, warnings)); // 各テーブルを正規化して1つの配列につなげる
-  return { courses: mergeByCode(courses, warnings), warnings };
+  return { courses, warnings };
 }
 
 runCli(normalizeEconomics, __dirname, 'mock.json');

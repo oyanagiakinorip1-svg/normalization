@@ -6,7 +6,6 @@ import {
   clean,
   createWarn,
   mapColumns,
-  mergeByCode,
   parseTerm,
   parseYear,
   readCode,
@@ -23,11 +22,8 @@ type EducationField =
   | 'instructor' // 成績担当教員
   | 'classroomCode'; // クラスコード
 
-// BaseCourseに教育学部だけの項目を足した型
-export type EducationCourse = BaseCourse & {
-  isIntensive: boolean;
-  subjectEnglish: string | null;
-};
+// 教育学部の講義。項目は全学部共通(BaseCourse)
+export type EducationCourse = BaseCourse;
 
 // 空白を除去してNFKCをかけたヘッダー名 -> フィールド
 const HEADER_ALIASES: Record<string, EducationField> = {
@@ -54,7 +50,7 @@ const CODE_PATTERN = /^[A-Z]{2}\d+$/; // 頭がアルファベット２文字で
 
 // 講義情報を正規化
 function normalizeTable(table: RawTable, warnings: Warning[]) {
-  const warn = createWarn(table, warnings); // 警告用の関数(common/normalizeUtils.ts)
+  const warn = createWarn(table, warnings, 'education'); // 警告用の関数(common/normalizeUtils.ts)
   const columns = mapColumns(
     table.headers,
     HEADER_ALIASES,
@@ -106,7 +102,8 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
       code,
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
       year: parseYear(get('year'), label, (message) => warn(rowIndex, message)), // 履修年度を数字にする 例 : "2026" -> 2026
-      systemIds: [table.systemId],
+      faculty: 'education',
+      systemId: table.systemId,
       level,
       term: parseTerm(termText, label, (message) => warn(rowIndex, message)), // 講義期間を前期・後期・通年にそろえる 例 : "前期集中" -> "前期"
       semesters: [], // 教育学部のデータには対象学年やセメスターがない
@@ -115,16 +112,19 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
       subjectEnglish: get('subjectEnglish') || null, // 空文字''ならnull
       instructor,
       classroomCode: get('classroomCode') || null, // 空文字''ならnull
+      place: null, // 教育学部のデータには教室がない
+      grades: null, // 教育学部のデータには対象学年がない
+      cellIndexes: null, // 教育学部のデータには曜日・講時がない
     });
   });
   return courses;
 }
 
-// 全テーブルを正規化して、講義コードでまとめたものと警告を返す
+// 全テーブルを正規化して、講義の一覧と警告を返す(同じ講義コードでもまとめない)
 export function normalizeEducation(tables: RawTable[]) {
   const warnings: Warning[] = []; // 全テーブル共通の警告リスト
   const courses = tables.flatMap((table) => normalizeTable(table, warnings)); // 各テーブルを正規化して1つの配列につなげる
-  return { courses: mergeByCode(courses, warnings), warnings };
+  return { courses, warnings };
 }
 
 runCli(normalizeEducation, __dirname, 'mock.json');

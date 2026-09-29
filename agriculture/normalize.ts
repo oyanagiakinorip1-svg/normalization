@@ -3,7 +3,6 @@ import {
   CourseStatus,
   Warning,
   clean,
-  mergeByCode,
   readCode,
   runCli,
 } from '../common/normalizeUtils';
@@ -13,9 +12,9 @@ type RawAgricultureCourse = {
   school: string; // 'undergraduate'(学部) / 'graduate'(大学院)
   subject: string; // 科目名
   classroomCode: string; // Classroomのクラスコード。不開講ならクラスコードではなく「不開講」と書かれている(出力ではnullにする)
-  page: number; // 元のPDFのページ
+  page: number; // ページ
   degree?: string; // 'master' / 'doctoral'(大学院のみ)
-  lectureCode: string | null; // 照合できた講義コード
+  lectureCode: string | null; // 講義コード。なければnull
   status: string; // 'matched' / 'unmatched' / 'ambiguous' / 'not-offered'
   candidateCodes: string[]; // 講義コードの候補
 };
@@ -24,11 +23,9 @@ degree?: string : ?をつけると「この項目はなくてもいい」とい�
 学部の講義にはdegreeがないので?をつけている
 */
 
-// BaseCourseに農学部だけの項目を足した型
-export type AgricultureCourse = BaseCourse & {
-  page: number; // 元のPDFのページ
-  candidateCodes: string[]; // 講義コードの候補(ambiguousのときに複数入る)
-};
+// 農学部の講義。項目は全学部共通(BaseCourse)
+// 入力のpageとcandidateCodesは出力には入れず、warningsのメッセージにだけ出す
+export type AgricultureCourse = BaseCourse;
 
 const SYSTEM_ID = 'agriculture';
 
@@ -40,7 +37,7 @@ const LEVEL_ALIASES: Record<string, AgricultureCourse['level']> = {
   graduate: '大学院',
 };
 
-// 全講義を正規化して、講義コードでまとめたものと警告を返す
+// 全講義を正規化して、講義の一覧と警告を返す(同じ講義コードでもまとめない)
 export function normalizeAgriculture(raws: RawAgricultureCourse[]) {
   const warnings: Warning[] = []; // 警告リスト
   const courses: AgricultureCourse[] = [];
@@ -49,10 +46,11 @@ export function normalizeAgriculture(raws: RawAgricultureCourse[]) {
     // 警告用の関数。農学部はテーブルがないので、tableIndexは-1にして、何番目の講義かをrowに入れる
     const warn = (message: string) =>
       warnings.push({
+        faculty: 'agriculture',
         systemId: SYSTEM_ID,
         tableIndex: -1,
         row: index,
-        message: `p.${raw.page} ${message}`, // 元のPDFのページも表示
+        message: `p.${raw.page} ${message}`, // 入力のpageも表示
       });
 
     const subject = clean(raw.subject);
@@ -61,7 +59,7 @@ export function normalizeAgriculture(raws: RawAgricultureCourse[]) {
     let code: string | null = null;
     let status: CourseStatus;
     if (raw.status === 'matched') {
-      // 照合できた講義コードの形式もチェック。形式が想定外ならunmatched
+      // 入力のlectureCodeの形式もチェック。形式が想定外ならunmatched
       code = readCode(raw.lectureCode ?? '', CODE_PATTERN, subject, warn).code;
       status = code === null ? 'unmatched' : 'matched';
     } else if (raw.status === 'ambiguous') {
@@ -93,7 +91,8 @@ export function normalizeAgriculture(raws: RawAgricultureCourse[]) {
       code,
       status,
       year: null, // 農学部のデータには年度がない
-      systemIds: [SYSTEM_ID],
+      faculty: 'agriculture',
+      systemId: SYSTEM_ID,
       level,
       term: null, // 農学部のデータには開講時期がない
       semesters: [], // 農学部のデータには対象学年やセメスターがない
@@ -103,11 +102,14 @@ export function normalizeAgriculture(raws: RawAgricultureCourse[]) {
         classroomCode === '' || classroomCode === '不開講'
           ? null
           : classroomCode, // 空文字''や「不開講」ならnull
-      page: raw.page,
-      candidateCodes: raw.candidateCodes,
+      place: null, // 農学部のデータには教室がない
+      subjectEnglish: null, // 農学部のデータには英語の科目名がない
+      isIntensive: null, // 農学部のデータには開講時期がない
+      grades: null, // 農学部のデータには対象学年がない
+      cellIndexes: null, // 農学部のデータには曜日・講時がない
     });
   });
-  return { courses: mergeByCode(courses, warnings), warnings };
+  return { courses, warnings };
   /*
   let status: CourseStatus : 型だけ先に決めておいて、値はif文の中で入れる
   どのif文を通っても必ず値が入るので、TypeScriptはエラーにしない

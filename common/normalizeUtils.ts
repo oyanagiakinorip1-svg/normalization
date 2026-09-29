@@ -11,6 +11,7 @@ export type RawTable = {
 };
 
 export type Warning = {
+  faculty: Faculty; // どの学部の警告か
   systemId: string;
   tableIndex: number;
   row: number | null;
@@ -30,18 +31,35 @@ export type CourseStatus =
 // 開講時期
 export type Term = '前期' | '後期' | '通年';
 
+// 学部(フォルダ名と同じ)
+export type Faculty =
+  | 'engineering' // 工学部
+  | 'law' // 法学部
+  | 'literature' // 文学部
+  | 'science' // 理学部
+  | 'agriculture' // 農学部
+  | 'education' // 教育学部
+  | 'economics'; // 経済学部
+
 // どの学部にもある講義情報。学部ごとの型はこれに項目を足して作る
 export type BaseCourse = {
   code: string | null; // 講義コードが取れなかったらnull(仮のコードは入れない)
   status: CourseStatus;
   year: number | null; // 年度(webAppのSyllabus.yearと同じ。Syllabusはcodeとyearの組み合わせで1件に決まる)。わからなければnull
-  systemIds: string[];
+  faculty: Faculty; // どの学部の講義か(どの学部のnormalize.tsで処理したか)
+  systemId: string; // 掲載元の系(入力のsystemIdのまま)
   level: '学部' | '大学院' | null;
   term: Term | null; // 前期・後期・通年。わからなければnull
   semesters: number[]; // セメスター番号の配列(webAppのSyllabus.semestersと同じ形)。わからなければ[] 例 : 2・3・4年の前期 -> [3, 5, 7]
   subject: string;
   instructor: string;
   classroomCode: string | null;
+  place: string | null; // 教室(webAppのSyllabus.placeと同じ名前)。データがなければnull
+  subjectEnglish: string | null; // 英語の科目名。データがなければnull
+  isIntensive: boolean | null; // 集中講義か。開講時期の列がなければnull
+  grades: number[] | null; // 対象学年 例 : [2, 3, 4]。データがなければnull
+  // 曜日・講時。Syllabus.cellIndexes と同じ採番: (講時 - 1) * 7 + 曜日(月=0)。曜日・講時の列がなければnull
+  cellIndexes: number[] | null;
 };
 
 export const JAPANESE = /[぀-ヿ一-鿿]/; // ひらがな, カタカナ, 漢字の文字コード領域
@@ -261,7 +279,7 @@ export function parseSemester(
   */
 
   warn(
-    `${label}: セメスター「${value}」を解釈できないため semester: null にしました`,
+    `${label}: セメスター「${value}」を解釈できないため semesters: [] にしました`,
   );
   return null;
 }
@@ -272,6 +290,39 @@ export function termFromSemester(semester: number | null): Term | null {
   return semester % 2 === 1 ? '前期' : '後期';
   /*
   semester % 2 : 2で割った余り。1なら奇数、0なら偶数
+  */
+}
+
+// 対象学年の表記を数字の配列にする。数字がなければnullにして警告を出す
+// 例 : "2･3･4" -> [2, 3, 4], "1・2" -> [1, 2], "1～2年" -> [1, 2], "文学部・2～4年次" -> [2, 3, 4]
+export function parseGrades(
+  value: string, // 対象学年のセルの値
+  label: string, // 警告メッセージ用(講義コードか科目名)
+  warn: (message: string) => void,
+): number[] | null {
+  const text = value.replace(/\s/g, ''); // スペース, タブ, 改行を取り除く
+  if (text === '') return null; // 対象学年の列がない、または空欄
+
+  const range = text.match(/(\d+)[~～〜-](\d+)/); // 範囲指定かどうか 例 : "2～4"
+  if (range !== null) {
+    const start = Number(range[1]);
+    const end = Number(range[2]);
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }
+
+  const grades = (text.match(/\d+/g) ?? []).map(Number); // 数字を全部取り出す 例 : "2･3･4" -> [2, 3, 4]
+  if (grades.length === 0) {
+    warn(
+      `${label}: 対象学年「${value}」を解釈できないため grades: null にしました`,
+    );
+    return null;
+  }
+  return grades;
+  /*
+  範囲指定の書き方はparseScheduleのrangeと同じ
+  Array.from({ length: 3 }, (_, i) => 2 + i) -> [2, 3, 4]
+
+  [~～〜-] : 「~」(半角)、「～」(全角)、「〜」(波ダッシュ)、「-」のどれか
   */
 }
 
@@ -296,9 +347,14 @@ export function semestersFromGrades(
 }
 
 // 警告用の関数を作る
-export function createWarn(table: RawTable, warnings: Warning[]) {
+export function createWarn(
+  table: RawTable,
+  warnings: Warning[],
+  faculty: Faculty, // どの学部か
+) {
   return (row: number | null, message: string) =>
     warnings.push({
+      faculty, // どの学部の警告か
       systemId: table.systemId, // どのシステムのデータか
       tableIndex: table.tableIndex, // 何番目のテーブルか
       row, // エラーの行
@@ -309,11 +365,11 @@ export function createWarn(table: RawTable, warnings: Warning[]) {
   function warn(row, message) { return warnings.push(...) } と同じ意味
   {}を書かずに1行で書いた場合はその処理の結果がそのままreturnされる
 
-  table.systemIdやtable.tableIndexは毎回同じなので、warnの中で埋めておけば呼ぶ側はrowとmessageだけ渡せばいい
-  例 : warn(3, 'おかしい') -> { systemId: 'common', tableIndex: 0, row: 3, message: 'おかしい' } がwarningsに追加される
+  faculty、table.systemId、table.tableIndexは毎回同じなので、warnの中で埋めておけば呼ぶ側はrowとmessageだけ渡せばいい
+  例 : warn(3, 'おかしい') -> { faculty: 'engineering', systemId: 'common', tableIndex: 0, row: 3, message: 'おかしい' } がwarningsに追加される
 
   createWarnは「warnという関数」を返す関数。学部ごとのnormalizeTableの最初で
-  const warn = createWarn(table, warnings) として使う
+  const warn = createWarn(table, warnings, 'engineering') として使う
   */
 }
 
@@ -361,86 +417,6 @@ export function mapColumns<F extends string>(
   Fは「呼ぶ側が決める型」。工学部ならFieldが、法学部ならLawFieldが入る
   extends string は「Fは文字列の型じゃないとダメ」という制限
   これで1つの関数を学部ごとに違うFieldで使い回せる
-  */
-}
-
-// 同じ講義コードを1件にまとめる。値が食い違う項目は先勝ちで警告を出す
-// codeがnullの講義は同じ講義か判断できないので、まとめずに1件ずつ残す
-export function mergeByCode<T extends BaseCourse>(
-  courses: T[],
-  warnings: Warning[],
-): T[] {
-  const results: T[] = []; // 出力する講義のリスト(元の順番のまま)
-  const merged = new Map<string, T>(); // 講義コード -> 講義情報 の辞書
-  for (const course of courses) {
-    if (course.code === null) {
-      // 講義コードがない講義はそのまま残す
-      results.push({ ...course });
-      continue;
-    }
-    const existing = merged.get(course.code); // すでに同じ講義コードが登録されているか
-    if (existing === undefined) {
-      // 初めて出てきた講義コードならコピーして登録
-      const copy = { ...course };
-      merged.set(course.code, copy);
-      results.push(copy);
-      continue; // 次のcourseへ
-    }
-    existing.systemIds = Array.from(
-      new Set([...existing.systemIds, ...course.systemIds]),
-    ); // 系のリストを合体して重複を消す 例 : ['A'] + ['B'] -> ['A', 'B']
-    existing.semesters = Array.from(
-      new Set([...existing.semesters, ...course.semesters]),
-    ).sort((a, b) => a - b); // セメスターも合体して重複を消し、小さい順に並べる
-    for (const key of [
-      'year',
-      'term',
-      'subject',
-      'instructor',
-      'classroomCode',
-    ] as const) {
-      if (existing[key] === null || existing[key] === '') {
-        // 先に登録された方が空なら後から来た方の値で埋める
-        (existing[key] as string | number | null) = course[key];
-      } else if (
-        course[key] !== null &&
-        course[key] !== '' &&
-        existing[key] !== course[key]
-      ) {
-        // 両方に値があって食い違う場合は先に登録された方を採用して警告
-        warnings.push({
-          systemId: course.systemIds[0],
-          tableIndex: -1, // 複数テーブルにまたがる警告なので特定のテーブルを指さない
-          row: null,
-          message: `${course.code}: ${key} が系によって異なります（「${existing[key]}」を採用、「${course[key]}」を破棄）`,
-        });
-      }
-    }
-  }
-  return results;
-  /*
-  new Map<string, T>() : キーと値のペアを持つ辞書
-  .set(key, value) : 登録
-  .get(key) : 取り出し。なければundefined
-
-  mergedとresultsには同じオブジェクト(copy)を入れている
-  あとでexistingを書き換えると、resultsの中の講義も一緒に書き換わる
-  resultsを別に持っているのは、codeがnullの講義も元の順番のまま並べるため
-
-  { ...course } : スプレッド構文
-  ... はオブジェクトや配列の中身を展開する
-  { ...course } はcourseの中身をコピーした新しいオブジェクトを作る
-  コピーしないと、あとでexistingを書き換えたときに元のcourseまで書き換わってしまう
-  例 : [...['A'], ...['B']] -> ['A', 'B']
-
-  as const : 配列を「'year' | 'term' | 'subject' | 'instructor' | 'classroomCode'」の型として扱わせる
-  これがないとkeyがただのstringになり、existing[key]でエラーになる
-
-  (existing[key] as string | number | null) = course[key]
-  keyによって型が違う(yearは数字、termは'前期'などに決まっている、classroomCodeはnullあり)ので、TypeScriptに「string | number | nullとして代入していいよ」と教えている
-
-  <T extends BaseCourse> : TはBaseCourseの項目を全部持っている型ならなんでもいい
-  EngineeringCourseでもLawCourseでも使えて、返り値も渡した型のまま返ってくる
   */
 }
 

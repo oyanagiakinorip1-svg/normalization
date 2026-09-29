@@ -6,12 +6,13 @@ import {
   clean,
   createWarn,
   mapColumns,
-  mergeByCode,
   parseSemester,
   parseSchedule,
   readCode,
   runCli,
   termFromSemester,
+  parseGrades,
+  semestersFromGrades,
 } from '../common/normalizeUtils';
 
 type LiteratureField =
@@ -26,12 +27,8 @@ type LiteratureField =
   | 'classroomCode' // クラスコード
   | 'placeAndClassroomCode'; // 教室／クラスコード(1年次のテーブルは1つの列にまとまっている)
 
-// BaseCourseに文学部だけの項目を足した型
-export type LiteratureCourse = BaseCourse & {
-  place: string | null; // 教室(webAppのSyllabus.placeと同じ名前)
-  // Syllabus.cellIndexes と同じ採番: (講時 - 1) * 7 + 曜日(月=0)
-  cellIndexes: number[] | null;
-};
+// 文学部の講義。項目は全学部共通(BaseCourse)
+export type LiteratureCourse = BaseCourse;
 
 // 空白を除去してNFKCをかけたヘッダー名 -> フィールド
 const HEADER_ALIASES: Record<string, LiteratureField> = {
@@ -60,7 +57,7 @@ function parseLevel(value: string): LiteratureCourse['level'] {
 
 // 講義情報を正規化
 function normalizeTable(table: RawTable, warnings: Warning[]) {
-  const warn = createWarn(table, warnings); // 警告用の関数(common/normalizeUtils.ts)
+  const warn = createWarn(table, warnings, 'literature'); // 警告用の関数(common/normalizeUtils.ts)
   const columns = mapColumns(
     table.headers,
     HEADER_ALIASES,
@@ -139,40 +136,65 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
     firstがundefinedならエラーにならずにundefinedを返す。そのあとの ?? '' で空文字にしている
     */
 
-    const level = parseLevel(get('target')); // 対象から学部・大学院を決める
-    if (columns.target !== undefined && level === null) {
-      // 対象の列はあるのに想定外の値だった場合は警告
-      warn(rowIndex, `${label}: 対象「${get('target')}」が想定外です`);
+    // 対象から学部・大学院を決める。対象の列がないテーブルは、ラベルから決める 例 : "文学部・1年次" -> "学部"
+    const level =
+      columns.target !== undefined
+        ? parseLevel(get('target'))
+        : parseLevel(table.label);
+    if (level === null) {
+      // 想定外の値だった場合は警告
+      warn(
+        rowIndex,
+        columns.target !== undefined
+          ? `${label}: 対象「${get('target')}」が想定外です`
+          : `${label}: ラベル「${table.label}」から学部か大学院か判断できません`,
+      );
     }
 
     const semester = parseSemester(get('semester'), label, (message) =>
       warn(rowIndex, message),
     ); // セメスターを数字にする 例 : "02" -> 2
 
+    const term = termFromSemester(semester); // 文学部のデータには前期・後期の列がないので、セメスターの奇数・偶数から決める 例 : 2 -> "後期"
+    // 「対象」に学年が書いてあれば取り出す 例 : "文学部・2～4年次" -> [2, 3, 4]。「文学研究科」のように数字がなければnull
+    const grades = /\d/.test(get('target'))
+      ? parseGrades(get('target'), label, (message) => warn(rowIndex, message))
+      : null;
+
     // 1行分の講義情報をLiteratureCourseの形にしてcoursesに追加
     courses.push({
       code,
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
       year: null, // 文学部のデータには年度がない
-      systemIds: [table.systemId],
+      faculty: 'literature',
+      systemId: table.systemId,
       level,
-      term: termFromSemester(semester), // 文学部のデータには前期・後期の列がないので、セメスターの奇数・偶数から決める 例 : 2 -> "後期"
-      semesters: semester === null ? [] : [semester], // 例 : 2 -> [2]
+      term,
+      // セメスターがあればそれを使う 例 : 2 -> [2]。なければ学部の講義だけ対象学年と前期・後期から計算する(大学院は学部と数え方が違うので計算しない)
+      semesters:
+        semester !== null
+          ? [semester]
+          : level === '学部'
+            ? semestersFromGrades(grades, term)
+            : [],
+      isIntensive: null, // 文学部のデータには前期・後期や集中の列がない
       subject: get('subject'),
+      subjectEnglish: null, // 文学部のデータには英語の科目名がない
       instructor,
       place: place || null, // 空文字''ならnull
       classroomCode: classroomCode || null, // 空文字''ならnull
+      grades,
       cellIndexes,
     });
   });
   return courses;
 }
 
-// 全テーブルを正規化して、講義コードでまとめたものと警告を返す
+// 全テーブルを正規化して、講義の一覧と警告を返す(同じ講義コードでもまとめない)
 export function normalizeLiterature(tables: RawTable[]) {
   const warnings: Warning[] = []; // 全テーブル共通の警告リスト
   const courses = tables.flatMap((table) => normalizeTable(table, warnings)); // 各テーブルを正規化して1つの配列につなげる
-  return { courses: mergeByCode(courses, warnings), warnings };
+  return { courses, warnings };
 }
 
 runCli(normalizeLiterature, __dirname, 'mock.json');

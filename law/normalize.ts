@@ -6,7 +6,6 @@ import {
   clean,
   createWarn,
   mapColumns,
-  mergeByCode,
   parseTerm,
   parseYear,
   readCode,
@@ -22,7 +21,7 @@ type LawField =
   | 'instructor' // 成績担当教員
   | 'classroomCode'; // クラスコード
 
-// 法学部は今のところBaseCourseにない項目がないのでそのまま使う
+// 法学部の講義。項目は全学部共通(BaseCourse)
 export type LawCourse = BaseCourse;
 
 // 空白を除去してNFKCをかけたヘッダー名 -> フィールド
@@ -53,7 +52,7 @@ const CODE_PATTERN = /^[A-Z]{2}\d+[A-Z]*$/; // 頭がアルファベット２文
 
 // 講義情報を正規化
 function normalizeTable(table: RawTable, warnings: Warning[]) {
-  const warn = createWarn(table, warnings); // 警告用の関数(common/normalizeUtils.ts)
+  const warn = createWarn(table, warnings, 'law'); // 警告用の関数(common/normalizeUtils.ts)
   const columns = mapColumns(
     table.headers,
     HEADER_ALIASES,
@@ -98,28 +97,36 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
       warn(rowIndex, `${label}: 学部／研究科「${get('level')}」が想定外です`);
     }
 
+    const termText = get('term').replace(/\s/g, ''); // 講義期間の空白をすべて消す
+
     // 1行分の講義情報をLawCourseの形にしてcoursesに追加
     courses.push({
       code,
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
       year: parseYear(get('year'), label, (message) => warn(rowIndex, message)), // 履修年度を数字にする 例 : "2026" -> 2026
-      systemIds: [table.systemId],
+      faculty: 'law',
+      systemId: table.systemId,
       level,
-      term: parseTerm(get('term'), label, (message) => warn(rowIndex, message)), // 講義期間を前期・後期・通年にそろえる
+      term: parseTerm(termText, label, (message) => warn(rowIndex, message)), // 講義期間を前期・後期・通年にそろえる 例 : "前期集中" -> "前期"
       semesters: [], // 法学部のデータには対象学年やセメスターがない
+      isIntensive: termText.includes('集中'), // 講義期間に「集中」が含まれていれば集中講義
       subject: get('subject'),
       instructor,
       classroomCode: get('classroomCode') || null, // 空文字''ならnull
+      place: null, // 法学部のデータには教室がない
+      subjectEnglish: null, // 法学部のデータには英語の科目名がない
+      grades: null, // 法学部のデータには対象学年がない
+      cellIndexes: null, // 法学部のデータには曜日・講時がない
     });
   });
   return courses;
 }
 
-// 全テーブルを正規化して、講義コードでまとめたものと警告を返す
+// 全テーブルを正規化して、講義の一覧と警告を返す(同じ講義コードでもまとめない)
 export function normalizeLaw(tables: RawTable[]) {
   const warnings: Warning[] = []; // 全テーブル共通の警告リスト
   const courses = tables.flatMap((table) => normalizeTable(table, warnings)); // 各テーブルを正規化して1つの配列につなげる
-  return { courses: mergeByCode(courses, warnings), warnings };
+  return { courses, warnings };
 }
 
 runCli(normalizeLaw, __dirname, 'mock.json');

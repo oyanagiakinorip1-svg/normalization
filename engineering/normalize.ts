@@ -6,7 +6,6 @@ import {
   clean,
   createWarn,
   mapColumns,
-  mergeByCode,
   parseTerm,
   readCode,
   parseSchedule,
@@ -23,13 +22,8 @@ type Field =
   | 'classroomCode' // Classroomのクラスコード
   | 'schedule'; // 開講曜日・講時(commonにのみある)
 
-// BaseCourseに工学部だけの項目を足した型
-export type EngineeringCourse = BaseCourse & {
-  isIntensive: boolean;
-  subjectEnglish: string | null;
-  // Syllabus.cellIndexes と同じ採番: (講時 - 1) * 7 + 曜日(月=0)
-  cellIndexes: number[] | null;
-};
+// 工学部の講義。項目は全学部共通(BaseCourse)
+export type EngineeringCourse = BaseCourse;
 /*
 A & B : 交差型
 AとBの項目を全部持つ型になる
@@ -59,7 +53,7 @@ function parseLevel(value: string): EngineeringCourse['level'] {
 
 // 講義情報を正規化
 function normalizeTable(table: RawTable, warnings: Warning[]) {
-  const warn = createWarn(table, warnings); // 警告用の関数(common/normalizeUtils.ts)
+  const warn = createWarn(table, warnings, 'engineering'); // 警告用の関数(common/normalizeUtils.ts)
   const columns = mapColumns(
     table.headers,
     HEADER_ALIASES,
@@ -136,7 +130,8 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
       code, // code: code の省略形
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
       year: null, // 工学部のデータには年度がない
-      systemIds: [table.systemId], // この時点では1つの系だけ。mergeByCodeで他の系とまとめる
+      faculty: 'engineering',
+      systemId: table.systemId, // 掲載元の系
       level,
       term,
       semesters: [], // 工学部のデータには対象学年やセメスターがない
@@ -145,6 +140,8 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
       subjectEnglish: get('subjectEnglish') || null, // 空文字''ならnull
       instructor,
       classroomCode: get('classroomCode') || null, // 空文字''ならnull
+      place: null, // 工学部のデータには教室がない
+      grades: null, // 工学部のデータには対象学年がない
       cellIndexes,
     });
     /*
@@ -160,11 +157,11 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
   return courses;
 }
 
-// 全テーブルを正規化して、講義コードでまとめたものと警告を返す
+// 全テーブルを正規化して、講義の一覧と警告を返す(同じ講義コードでもまとめない)
 export function normalizeEngineering(tables: RawTable[]) {
   const warnings: Warning[] = []; // 全テーブル共通の警告リスト
   const courses = tables.flatMap((table) => normalizeTable(table, warnings)); // 各テーブルを正規化して1つの配列につなげる
-  return { courses: mergeByCode(courses, warnings), warnings };
+  return { courses, warnings };
   /*
   .flatMap() : mapしたあとに1段階だけ平らにする
   normalizeTableは配列を返すので、mapだと配列の配列になってしまう
