@@ -14,6 +14,9 @@ UNIPA以外から取得した講義情報を学部ごとに正規化する
 | `agriculture/` | 農学部用。1講義1オブジェクトの入力形式に対応 |
 | `education/` | 教育学部用 |
 | `economics/` | 経済学部用。英語のヘッダーのテーブル（GPEM）にも対応 |
+| `medicine/` | 医学部用 |
+| `dentistry/` | 歯学部用 |
+| `pharmacy/` | 薬学部用 |
 
 各フォルダの`mock.json`が各学部のモックに対応している
 
@@ -55,7 +58,7 @@ npx tsx <学部>/normalize.ts [入力JSON] [出力JSON]
 ```
 
 - ヘッダーはテーブルごとに決まった列にないので、テーブルを読むたびに「どのフィールドが何列目か」の辞書を作る。ヘッダーの書き方の違い（例:「授業コード」と「講義コード」、「担当教員」と「Instructor」）は学部ごとの `HEADER_ALIASES`でフィールド名にそろえる。
-- 辞書の番号で各行から値を取り出し、講義コード・開講時期・曜日講時などを読み取る（`readCode`、`parseYear`、`parseTerm`、`parseSemester`、`parseGrades`、`parseSchedule`）。<br>
+- 辞書の番号で各行から値を取り出し、講義コード・開講時期・曜日講時などを読み取る（`readCode`、`parseYear`、`parseTerm`、`parseTermFromMonths`、`parseSemester`、`parseGrades`、`parseSchedule`）。<br>
 **※1つのテーブルの中では、ヘッダーと各行の同じ番号の列が対応しているものとして読んでいる（決め打ち）**
 - 同じ講義コードの講義が複数の系に載っていても、まとめずに系ごとに1件ずつ出力する（まとめ方はDBに保存する側で決める）。
 - 読み取れなかった値や、列ずれの疑い（列数がヘッダーの数と違う、担当教員名に日本語がないなど）は、途中で`warnings`に記録。ただし経済学部のGPEMのテーブルは教員名が英語なので、担当教員名の日本語のチェックはしない
@@ -69,7 +72,7 @@ npx tsx <学部>/normalize.ts [入力JSON] [出力JSON]
 |---|---|---|
 | `code` | `string \| null` | 講義コード。取れなければ `null` |
 | `status` | 下の表を参照 | 講義コードが取れたかどうか |
-| `year` | `number \| null` | 年度。法学部・教育学部だけ入る。ほかは `null` |
+| `year` | `number \| null` | 年度。履修年度の列があればそこから、なければテーブルのラベルの「〇〇〇〇年度」から。どちらもなければ `null` |
 | `faculty` | `string` | どの学部の講義か（フォルダ名と同じ。例：`engineering`） |
 | `systemId` | `string` | 掲載元の系（入力の`systemId`のまま。農学部は`agriculture`） |
 | `level` | `'学部' \| '大学院' \| null` | 学部か大学院か |
@@ -107,6 +110,7 @@ npx tsx <学部>/normalize.ts [入力JSON] [出力JSON]
 | 5セメ、02 など | 奇数なら`前期`、偶数なら`後期` | `[5]`、`[2]` |
 | Ⅰ、Ⅱ、Ⅲ（経済学部の学期） | 奇数なら`前期`、偶数なら`後期` | 下を参照 |
 | Spring、Fall（経済学部のGPEM） | `前期`、`後期` | 下を参照 |
+| 2026年4月～7月、10月～1月 など（開講期間の月） | 始まりの月が4〜9月なら`前期`、10〜3月なら`後期` | 下を参照 |
 | そろえられない表記 | `null` | `[]` |
 
 セメスターの列がなければ、`grades`と`term`からセメスターを計算する（`semestersFromGrades`）<br>

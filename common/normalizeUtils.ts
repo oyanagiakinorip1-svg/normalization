@@ -39,7 +39,10 @@ export type Faculty =
   | 'science' // 理学部
   | 'agriculture' // 農学部
   | 'education' // 教育学部
-  | 'economics'; // 経済学部
+  | 'economics' // 経済学部
+  | 'medicine' // 医学部
+  | 'dentistry' // 歯学部
+  | 'pharmacy'; // 薬学部
 
 // どの学部にもある講義情報。学部ごとの型はこれに項目を足して作る
 export type BaseCourse = {
@@ -118,7 +121,9 @@ export function parseSchedule(value: string): number[] | null {
   const text = value
     .normalize('NFKC') // 読み取るだけなのでNFKCで強めに統一する 例 : "月１，３" -> "月1,3"
     .replace(/\s/g, '') // スペース, タブ, 改行を取り除く
-    .replace(/講時|限/g, ''); // 例 : 月1限 -> 月1
+    .replace(/曜日?/g, '') // 例 : 月曜4 -> 月4
+    .replace(/講時|時限|限/g, '') // 例 : 月1限 -> 月1, 月4時限 -> 月4
+    .replace(/~/g, '-'); // 範囲の「～」はNFKCで「~」になるので「-」にそろえる 例 : 月4~5 -> 月4-5
   if (text === '' || text.includes('集中')) return []; // テキストが空または集中講義の場合は特定の曜日・コマを持たないためnullではなく空配列[]を返して正常終了
 
   const indexes: number[] = [];
@@ -214,6 +219,42 @@ export function readCode(
 
   返り値 { code, label } : 2つの値をまとめて返している
   呼ぶ側は const { code, label } = readCode(...) として取り出す(分割代入)
+  */
+}
+
+// 開講期間の月から前期・後期を決める。始まりの月が4〜9月なら前期、10〜3月なら後期。月が読み取れなければnullにして警告を出す
+// 例 : "2026年4月～7月" -> "前期", "10月～1月" -> "後期"
+export function parseTermFromMonths(
+  value: string, // 開講期間のセルの値
+  label: string, // 警告メッセージ用(講義コードか科目名)
+  warn: (message: string) => void,
+): Term | null {
+  const text = value.normalize('NFKC').replace(/\s/g, ''); // 全角の数字もそろえて、空白を取り除く
+  if (text === '') return null; // 開講期間の列がない、または空欄
+
+  const match = text.match(/(\d{1,2})月/); // 最初に出てくる「〇月」
+  const month = match === null ? null : Number(match[1]);
+  if (month !== null && month >= 1 && month <= 12) {
+    return month >= 4 && month <= 9 ? '前期' : '後期';
+  }
+  warn(
+    `${label}: 開講期間「${value}」を解釈できないため term: null にしました`,
+  );
+  return null;
+  /*
+  text.match(/(\d{1,2})月/) : 「月」の前にある1〜2桁の数字を探す。最初に見つかったものが始まりの月
+  例 : "2026年4月～7月" -> match[1] -> "4"
+  */
+}
+
+// テーブルのラベルに「〇〇〇〇年度」があれば、その年度を返す。なければnull(警告は出さない)
+// 例 : "歯学部歯学科・2026年度授業時間割表" -> 2026, "機械・知能系" -> null
+export function yearFromLabel(label: string): number | null {
+  const match = label.normalize('NFKC').match(/(\d{4})年度/);
+  return match === null ? null : Number(match[1]);
+  /*
+  label.normalize('NFKC') : 全角の数字(２０２６)も半角にそろえる
+  /(\d{4})年度/ : 「年度」の前にある4桁の数字
   */
 }
 

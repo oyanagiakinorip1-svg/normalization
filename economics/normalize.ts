@@ -12,6 +12,7 @@ import {
   parseTerm,
   readCode,
   runCli,
+  yearFromLabel,
   semestersFromGrades,
   parseGrades,
 } from '../common/normalizeUtils';
@@ -192,7 +193,7 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
     courses.push({
       code,
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
-      year: null, // 経済学部のデータには年度がない
+      year: yearFromLabel(table.label), // 経済学部のデータには年度の列がないので、ラベルの「〇〇〇〇年度」から。なければnull
       faculty: 'economics',
       systemId: table.systemId,
       level,

@@ -10,6 +10,7 @@ import {
   parseYear,
   readCode,
   runCli,
+  yearFromLabel,
 } from '../common/normalizeUtils';
 
 type LawField =
@@ -103,7 +104,9 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
     courses.push({
       code,
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
-      year: parseYear(get('year'), label, (message) => warn(rowIndex, message)), // 履修年度を数字にする 例 : "2026" -> 2026
+      year:
+        parseYear(get('year'), label, (message) => warn(rowIndex, message)) ??
+        yearFromLabel(table.label), // 履修年度を数字にする 例 : "2026" -> 2026。空欄ならラベルの「〇〇〇〇年度」から
       faculty: 'law',
       systemId: table.systemId,
       level,

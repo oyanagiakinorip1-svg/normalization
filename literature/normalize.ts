@@ -10,6 +10,7 @@ import {
   parseSchedule,
   readCode,
   runCli,
+  yearFromLabel,
   termFromSemester,
   parseGrades,
   semestersFromGrades,
@@ -165,7 +166,7 @@ function normalizeTable(table: RawTable, warnings: Warning[]) {
     courses.push({
       code,
       status: code === null ? 'unmatched' : 'matched', // 講義コードが取れたかどうか
-      year: null, // 文学部のデータには年度がない
+      year: yearFromLabel(table.label), // 文学部のデータには年度の列がないので、ラベルの「〇〇〇〇年度」から。なければnull
       faculty: 'literature',
       systemId: table.systemId,
       level,
